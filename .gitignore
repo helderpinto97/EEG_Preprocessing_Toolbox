@@ -1,0 +1,29 @@
+# Third-party toolboxes. EEGLAB is installed separately, see README.
+lib/toolboxes/
+
+# Raw data stays out of version control. The folder is kept so the default
+# cfg.inDir resolves on a fresh clone.
+data/*
+!data/.gitkeep
+
+# Everything the pipeline produces
+derivatives/
+tests/output/
+
+# Backups
+lib/baks_files/
+*.bak
+*.bak[0-9]
+*.superseded
+
+# MATLAB
+*.asv
+*.m~
+*.mex*
+slprj/
+codegen/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
