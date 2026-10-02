@@ -1,0 +1,14 @@
+# Normalise line endings in the repository, so a checkout on Linux or macOS
+# does not produce whole-file diffs against one made on Windows.
+* text=auto eol=lf
+
+*.m   text eol=lf
+*.md  text eol=lf
+*.json text eol=lf
+
+# Binary, never diffed or line-ending converted
+*.png binary
+*.mat binary
+*.set binary
+*.fdt binary
+*.elc binary
