@@ -13,6 +13,7 @@ import
   -> drop non-EEG channels          (labels + chanlocs.type)
   -> attach and verify positions    (errors below cfg.minLocFrac)
   -> resample
+  -> flat channels                  (on the raw signal, before line-noise removal)
   -> line noise                     (zapline-plus, notch fallback)
   -> filter, two branches           (cfg.hpAnalysis and cfg.hpICA)
   -> bad channels                   (clean_rawdata)

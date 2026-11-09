@@ -173,6 +173,40 @@ for on = [false true]
 end
 end
 
+function testPartialDropoutCaughtBeforeLineNoise(t)
+% A dropout that covers only part of the recording. Zapline-plus processes
+% the channel in chunks where it is not flat throughout and writes signal
+% into the flat stretch, so flatness must be judged on the raw data.
+inDir = newdir();
+EEG = prep_testdata('Labels', t.TestData.labels, 'Secs', 60, 'Spatial', true, 'Seed', 2);
+o2  = find(strcmp({EEG.chanlocs.labels}, 'O2'));
+EEG.data(o2, round(17*EEG.srate):round(43*EEG.srate)) = 0;   % 26 s, not chunk-aligned
+prep_quiet(@pop_saveset, eeg_checkset(EEG), 'filename', 'sub-01.set', 'filepath', inDir);
+
+T = run_quiet(batch_cfg(inDir, newdir()));
+verifyEqual(t, T.status(1), "ok", T.error(1));
+verifyEqual(t, T.chans_flat_raw(1), "O2");
+verifyTrue(t, contains(T.chans_rejected(1), "O2"));
+end
+
+function testNotchAfterZaplineWhenMainsInBand(t)
+% With the low-pass above the mains, cfg.lineNotch removes what Zapline-plus
+% leaves; the saved data must show no 50 Hz peak.
+inDir  = write_subjects(t, 1);
+outDir = newdir();
+cfg = batch_cfg(inDir, outDir);
+cfg.lp = 70; cfg.lineNotch = true;
+T = run_quiet(cfg);
+verifyEqual(t, T.status(1), "ok", T.error(1));
+verifyEqual(t, T.line_method(1), "zapline-plus+notch");
+
+C = load_quiet(fullfile(outDir, 'sub-01_clean.set'));
+[P, f] = pwelch(double(C.data)', 4*C.srate, 2*C.srate, 0:0.25:C.srate/2, C.srate);
+pk = mean(P(f >= 49.5 & f <= 50.5, :), 1);
+bg = median(P((f >= 40 & f <= 46) | (f >= 54 & f <= 60), :), 1);
+verifyLessThan(t, max(10*log10(pk ./ bg)), 3, 'a 50 Hz peak survives the notch');
+end
+
 % -------------------------------------------------------------------------
 function T = run_quiet(cfg)
 c = prep_nowarn(); %#ok<NASGU>

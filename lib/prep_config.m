@@ -40,6 +40,8 @@ cfg.hpAnalysis = 0.5;      % Hz. Also removes slow electrode drift, which ICA
 cfg.hpICA      = 1.0;      % Hz
 cfg.lp         = 45;       % Hz; [] = no low-pass
 cfg.lineFreq   = 50;       % Hz mains; [] = no line-noise removal
+cfg.lineNotch  = false;    % notch (lineFreq +/-2 Hz) after Zapline-plus, applied
+                           % only when cfg.lp keeps the mains in the passband
 
 %% Reference
 % [] average | 'none' keep the existing one | 'Cz' | {'M1','M2'}

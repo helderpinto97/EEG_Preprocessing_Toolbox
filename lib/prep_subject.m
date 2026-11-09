@@ -5,7 +5,7 @@ function qc = prep_subject(inFile, outDir, cfg, env)
 %   qc = prep_subject(inFile, outDir, cfg, env)   env from prep_env, put
 %                                                 at the front of the row
 %
-% import -> resample -> line noise -> filter (two branches) -> bad channels
+% import -> resample -> flat channels -> line noise -> filter (two branches) -> bad channels
 % -> reference -> ICA -> ICLabel + component rules -> [interpolate
 % -> average reference again] -> [epoch] -> save -> QC figures
 
@@ -29,6 +29,20 @@ if ~isempty(cfg.srate) && EEG.srate ~= cfg.srate
 end
 qc.srate = EEG.srate;
 
+%% Flat channels, on the raw signal
+% Zapline-plus skips a channel only in chunks where it is flat throughout,
+% so a dropout that does not fill whole chunks picks up small values and no
+% longer passes as flat after line-noise removal and filtering.
+flatRaw = false(1, EEG.nbchan);
+if ~isempty(cfg.flatlineSec)
+    F0 = clean_flatlines(EEG, cfg.flatlineSec);
+    if isfield(F0.etc, 'clean_channel_mask')
+        flatRaw = ~logical(F0.etc.clean_channel_mask(:)');
+    end
+    clear F0
+end
+qc.chans_flat_raw = string(strjoin({EEG.chanlocs(flatRaw).labels}, '|'));
+
 %% Line noise
 % Zapline-plus if available, a notch otherwise.
 qc.line_method = "none";
@@ -37,6 +51,13 @@ if ~isempty(cfg.lineFreq)
         EEG = clean_data_with_zapline_plus_eeglab_wrapper(EEG, ...
                   struct('noisefreqs', cfg.lineFreq, 'plotResults', 0));
         qc.line_method = "zapline-plus";
+        % Zapline-plus can leave a residual peak (non-stationary or local
+        % line noise). Only relevant when the low-pass keeps the mains.
+        if cfg.lineNotch && (isempty(cfg.lp) || cfg.lp > cfg.lineFreq - 2)
+            EEG = pop_eegfiltnew(EEG, 'locutoff', cfg.lineFreq-2, ...
+                                      'hicutoff', cfg.lineFreq+2, 'revfilt', 1);
+            qc.line_method = "zapline-plus+notch";
+        end
     catch
         EEG = pop_eegfiltnew(EEG, 'locutoff', cfg.lineFreq-2, ...
                                   'hicutoff', cfg.lineFreq+2, 'revfilt', 1);
@@ -69,6 +90,13 @@ keep = true(1, EEG.nbchan);
 if isfield(EEGica.etc, 'clean_channel_mask')
     keep = logical(EEGica.etc.clean_channel_mask(:)');
 end
+% Flat before line-noise removal; dropped from the ICA copy as well, which
+% clean_artifacts has already reduced to its own mask.
+extraFlat = {EEG.chanlocs(flatRaw & keep).labels};
+if ~isempty(extraFlat)
+    EEGica = pop_select(EEGica, 'nochannel', extraFlat);
+end
+keep = keep & ~flatRaw;
 chanlocsFull      = EEG.chanlocs;          % for interpolation
 qc.asr_chandetect = cfg.asrForChannelDetection;
 qc.nchan_rejected = sum(~keep);
