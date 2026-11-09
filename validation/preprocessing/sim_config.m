@@ -7,12 +7,12 @@ function sim = sim_config(overrides)
 % Unknown fields are rejected, as in prep_config, so a typo fails loudly
 % instead of running a whole study with the default it meant to change.
 
-root = fileparts(fileparts(mfilename('fullpath')));
+root = fileparts(fileparts(fileparts(mfilename('fullpath'))));   % validation/preprocessing -> repository
 
 %% Paths
 sim.sereegaPath = fullfile(root, 'lib', 'toolboxes', 'SEREEGA');
 sim.hartmutPath = fullfile(root, 'lib', 'toolboxes', 'HArtMuT');  % HArtMuT_NYhead_small.mat
-sim.outRoot     = fullfile(root, 'validation', 'results');       % one subfolder per run
+sim.outRoot     = fullfile(root, 'validation', 'results', 'preprocessing');     % one subfolder per run
 sim.runName     = '';     % appended to the run folder name, e.g. 'stroke_acute'
 
 %% Clean EEG (SEREEGA, HArtMuT New York Head lead field)
@@ -37,6 +37,22 @@ sim.sensorNoise = 0.5;  % uV SD of white noise per electrode
 sim.stroke       = 'none';
 sim.lesionCentre = [-45 -20 25];   % MNI mm; left perisylvian cortex
 sim.lesionRadius = 40;             % mm
+
+%% Genuine interactions (sim_coupled, sim_heart)
+% Off by default. When on, run_validation adds known interactions to the
+% clean EEG: a redundant and a synergistic source triplet, a theta source
+% coupled to the heart period, and a heartbeat-evoked potential; the
+% cardiac artifact then uses the same heartbeats. See tests/EEG Genuine
+% Interactions Validation Plan.md. The strengths are starting values for the
+% ground truth check (check_coupled_truth), not tuned results.
+sim.coupling       = false;
+sim.coupledDb      = 0;     % dB, each triplet against the background power
+sim.coupledSpacing = 40;    % mm, minimum distance between the 8 sources
+sim.tripVar  = struct('lag', 2, 'c', 0.6, 'r', 0.95, 'fTrip', 10, 'fRange', [4 30]);  % as src_config var
+sim.bhCouple = [0.5 0];     % [heart -> brain, brain -> heart], beat level (sim_heart)
+sim.bhDepth  = 0.5;         % SD of the log amplitude of the brain-heart source
+sim.bhDb     = -3;          % dB, brain-heart source against the background power
+sim.hepUv    = 2;           % uV, HEP at its peak channel
 
 %% Artifacts
 % Severity is set by SNR, 10*log10(P_clean / P_artifact), over all channels

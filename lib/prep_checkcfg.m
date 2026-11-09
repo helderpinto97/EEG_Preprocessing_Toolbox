@@ -121,7 +121,7 @@ if (useEvents || useFixed) && ~isempty(cfg.baseline)
 end
 
 %% Flags
-for f = {'asrForChannelDetection','interpolate','overwrite','icaReproducible', ...
+for f = {'asrForChannelDetection','interpolate','rerefAfterInterp','overwrite','icaReproducible', ...
          'recursive','epochReject','icaHeartbeat'}
     v = cfg.(f{1});
     req(islogical(v) && isscalar(v), 'flag', 'cfg.%s must be true or false.', f{1});

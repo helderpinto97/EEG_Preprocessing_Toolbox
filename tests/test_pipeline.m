@@ -144,6 +144,35 @@ mt = dir(fullfile(outDir, 'sub-01_clean.set'));
 verifyEqual(t, mt.datenum, first);   % untouched
 end
 
+function testAverageAgainAfterInterpolation(t)
+% The first average excludes the bad channel; once it is interpolated back,
+% only a second average makes the full montage sum to zero again.
+inDir = newdir();
+EEG = prep_testdata('Labels', t.TestData.labels, 'Secs', 60, 'Spatial', true, 'Seed', 1);
+EEG.data(5, :) = 0;                        % Fz dead: flatline criterion
+prep_quiet(@pop_saveset, eeg_checkset(EEG), 'filename', 'sub-01.set', 'filepath', inDir);
+
+for on = [false true]
+    outDir = newdir();
+    cfg = batch_cfg(inDir, outDir);
+    cfg.interpolate = true; cfg.rerefAfterInterp = on;
+    T = run_quiet(cfg);
+    verifyEqual(t, T.status(1), "ok", T.error(1));
+    verifyGreaterThan(t, T.nchan_rejected(1), 0);
+    C = load_quiet(fullfile(outDir, 'sub-01_clean.set'));
+    verifyEqual(t, C.nbchan, numel(t.TestData.labels));
+    verifyNotEmpty(t, C.icaweights, 'the second reference must keep the ICA weights');
+    m = max(abs(mean(double(C.data), 1))) / max(std(double(C.data), 0, 2));
+    if on
+        verifyEqual(t, T.reref_final(1), "average");
+        verifyLessThan(t, m, 1e-5);
+    else
+        verifyEqual(t, T.reref_final(1), "none");
+        verifyGreaterThan(t, m, 1e-3);
+    end
+end
+end
+
 % -------------------------------------------------------------------------
 function T = run_quiet(cfg)
 c = prep_nowarn(); %#ok<NASGU>

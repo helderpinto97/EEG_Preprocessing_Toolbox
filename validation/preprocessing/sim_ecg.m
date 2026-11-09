@@ -9,7 +9,13 @@ function art = sim_ecg(lf, sim, seed)
 % the lead field (EEGLAB axes: X front, Y left, Z up).
 %
 % The time course is a PQRST complex built from Gaussians, at
-% sim.heartRate beats per minute with 5% beat-to-beat variability.
+% sim.heartRate beats per minute. The heart period series is an AR(4)
+% process with a respiratory (HF) and a slower (LF) oscillation: poles of
+% radius 0.9 at 0.3 cycles/beat and 0.8 at 0.1 cycles/beat, as in the
+% benchmark models of cardiovascular variability, scaled to an SD of 5% of
+% the mean heart period. When sim.beats holds R peak times (s, from
+% sim_heart), those are used instead, so the artifact beats with the
+% coupled EEG of sim_coupled.
 %
 % ART has the same fields as sim_eog: data, active, peak.
 
@@ -33,14 +39,23 @@ for w = waves'
     beat = beat + w(1) * exp(-(tb - w(2)).^2 / (2 * w(3)^2));
 end
 
-s  = zeros(1, pnts);
 rr = 60 / sim.heartRate;
-t  = 0.5 + rand * rr;                           % first R peak, s
-while true
+nb = ceil(1.5 * sim.secs / rr) + 10;            % more beats than can fit
+p  = [0.9 * exp([1 -1] * 1i*2*pi*0.3), 0.8 * exp([1 -1] * 1i*2*pi*0.1)];
+v  = filter(1, real(poly(p)), randn(1, nb + 200));
+v  = v(201:end);                                % drop the transient
+v  = 0.05 * (v - mean(v)) / std(v);
+tR = 0.5 + rand * rr;                           % first R peak, s
+tR = tR + rr * [0 cumsum(1 + v)];
+if isfield(sim, 'beats') && ~isempty(sim.beats)
+    tR = sim.beats;                             % heart shared with the EEG (sim_heart)
+end
+
+s  = zeros(1, pnts);
+for t = tR
     i = round((t + tb) * sim.srate) + 1;
     if i(end) > pnts, break, end
     s(i) = s(i) + beat;
-    t = t + rr * (1 + 0.05 * randn);
 end
 
 art.data   = topo * s;

@@ -1,14 +1,14 @@
 function report_figures(runDirs, outDir, revisedDirs, threshDirs)
 % REPORT_FIGURES  Publication figures and a summary table from validation runs.
 %
-%   report_figures({'validation/results/<run1>', 'validation/results/<run2>'})
+%   report_figures({'validation/results/preprocessing/<run1>', 'validation/results/preprocessing/<run2>'})
 %   report_figures(runDirs, outDir)
 %   report_figures(runDirs, outDir, revisedDirs)
 %   report_figures(runDirs, outDir, revisedDirs, {baseDirs, newDirs})
 %
 % Pools the metrics.csv of one or more run_validation runs (the clean
 % condition is taken from the first run that has it) and writes to OUTDIR
-% (default validation/results/report_<timestamp>/):
+% (default validation/results/preprocessing/report_<timestamp>/):
 %
 %   fig1_simulation      artifact scalp maps and example traces
 %   fig2_performance     artifact removed, SNR after, correlation, by severity
@@ -31,14 +31,14 @@ function report_figures(runDirs, outDir, revisedDirs, threshDirs)
 % (each series also has its own marker, for grayscale print).
 
 here = fileparts(mfilename('fullpath'));
-root = fileparts(here);
+root = fileparts(fileparts(here));          % validation/preprocessing -> repository
 addpath(here, fullfile(root, 'lib'));
 if ~exist('eeglab', 'file'), addpath(fullfile(root, 'lib', 'toolboxes', 'eeglab')); end
 evalc('eeglab nogui');
 
 runDirs = cellstr(runDirs);
 if nargin < 2 || isempty(outDir)
-    outDir = fullfile(here, 'results', ['report_' char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'))]);
+    outDir = fullfile(fileparts(here), 'results', 'preprocessing', ['report_' char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'))]);
 end
 if ~isfolder(outDir), mkdir(outDir); end
 

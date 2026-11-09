@@ -19,7 +19,7 @@ import
   -> reference                      (average, none, or named channels)
   -> ICA                            (PCA dimension = measured rank)
   -> ICLabel + component rules      (cardiac, single electrode; flag and subtract)
-  -> [interpolate]
+  -> [interpolate]                  (+ average reference again, cfg.rerefAfterInterp)
   -> [epoch]                        (+ baseline, + epoch rejection)
   -> save
 ```
@@ -313,15 +313,22 @@ channels) are added at several strengths, and the pipeline output is compared
 with the clean signal.
 
 ```matlab
+addpath validation/preprocessing
 R = run_validation();                   % settings in sim_config.m
 R = run_validation(struct('seeds', 1:20));
 ```
 
 Each run writes the simulated inputs, the ground truth, the pipeline output
-and `metrics.csv` to `validation/results/<timestamp>/`. `report_figures.m`
-draws the summary figures. SEREEGA and the HArtMuT lead field are not
-included; put them in `lib/toolboxes/SEREEGA` and `lib/toolboxes/HArtMuT`,
-or set `sim.sereegaPath` and `sim.hartmutPath` in `sim_config.m`.
+and `metrics.csv` to `validation/results/preprocessing/<timestamp>/`.
+`report_figures.m` draws the summary figures. SEREEGA and the HArtMuT lead
+field are not included; put them in `lib/toolboxes/SEREEGA` and
+`lib/toolboxes/HArtMuT`, or set `sim.sereegaPath` and `sim.hartmutPath` in
+`sim_config.m`.
+
+`validation/source/` holds a second validation, of source reconstruction
+and higher-order interaction measures on preprocessed data.
+`validation/README.md` describes both parts, how to run them and the
+result folders.
 
 ## License
 

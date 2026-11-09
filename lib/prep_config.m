@@ -73,6 +73,10 @@ cfg.icaSingleChan = 0.95;  % map power share on one channel => electrode artifac
 %% Optional steps
 cfg.asrForChannelDetection = false;  % ASR informs channel detection only
 cfg.interpolate            = false;  % spherical-spline interpolation of bad channels
+% With an average reference, average again after interpolation so the full
+% montage sums to zero. No effect for other references or when nothing was
+% interpolated.
+cfg.rerefAfterInterp       = true;
 
 %% Epoching
 % Time-locked (cfg.events) or fixed length (cfg.epochLength), not both;

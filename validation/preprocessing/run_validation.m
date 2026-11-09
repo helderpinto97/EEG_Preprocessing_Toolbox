@@ -1,28 +1,42 @@
-function R = run_validation(overrides)
+function R = run_validation(overrides, resumeDir)
 % RUN_VALIDATION  Validate the preprocessing pipeline on simulated EEG.
 %
 %   R = run_validation()                   defaults from sim_config
 %   R = run_validation(struct('secs', 60)) with overrides
+%   R = run_validation([], runDir)         resume an interrupted run
+%
+% Resume: the settings come from runDir/simulation.mat (overrides are
+% ignored), the simulation is repeated with the same seeds but existing
+% inputs are not rewritten, and the pipeline skips datasets whose output
+% already exists. A dataset cut off while its output was being saved
+% leaves a broken file; delete it before resuming.
 %
 % Per seed: simulate clean EEG (SEREEGA), add each artifact in sim.artifacts
 % at every severity, run all datasets through run_preprocessing with the
 % production settings, and compare each output with the ground truth.
 %
-% Output in validation/results/<timestamp>[_runName]/:
+% Output in validation/results/preprocessing/<timestamp>[_runName]/:
 %   sim/             the simulated inputs, s<seed>_<condition>.set
-%   ground_truth/    the clean EEG, s<seed>.set
+%   ground_truth/    the clean EEG, s<seed>.set; with sim.coupling also the
+%                    background without the coupling, s<seed>_bg.set
 %   derivatives/     the pipeline output and QC log
 %   metrics.csv      one row per seed and dataset (R, returned too)
 %   simulation.mat   sim parameters and the chosen sources per seed
 %
 % Needs EEGLAB with the pipeline plugins, SEREEGA and the HArtMuT lead field.
 
-if nargin < 1, overrides = struct(); end
+if nargin < 1 || isempty(overrides), overrides = struct(); end
+resume = nargin > 1 && ~isempty(resumeDir);
 here = fileparts(mfilename('fullpath'));
-root = fileparts(here);
-addpath(here, root, fullfile(root, 'lib'));
+root = fileparts(fileparts(here));          % validation/preprocessing -> repository
+addpath(here, root, fullfile(root, 'lib'), fullfile(fileparts(here), 'source'));
 
-sim = sim_config(overrides);
+if resume
+    S   = load(fullfile(resumeDir, 'simulation.mat'), 'sim');
+    sim = S.sim;
+else
+    sim = sim_config(overrides);
+end
 
 %% EEGLAB
 if ~exist('eeglab', 'file')
@@ -34,10 +48,12 @@ evalc('eeglab nogui');
 stamp    = char(datetime('now', 'Format', 'yyyyMMdd_HHmmss'));
 if ~isempty(sim.runName), stamp = [stamp '_' sim.runName]; end
 outDir   = fullfile(sim.outRoot, stamp);
+if resume, outDir = resumeDir; end
 simDir   = fullfile(outDir, 'sim');
 truthDir = fullfile(outDir, 'ground_truth');
 derivDir = fullfile(outDir, 'derivatives');
-mkdir(simDir); mkdir(truthDir);
+if ~isfolder(simDir),   mkdir(simDir);   end
+if ~isfolder(truthDir), mkdir(truthDir); end
 
 %% Simulation
 % All seeds go into one input folder, so the pipeline starts once.
@@ -48,7 +64,22 @@ info = cell(1, numel(sim.seeds));
 for si = 1:numel(sim.seeds)
     seed = sim.seeds(si);
     [clean, info{si}] = sim_clean_eeg(lf, sim, seed);
-    pop_saveset(clean, 'filename', sprintf('s%02d.set', seed), 'filepath', truthDir);
+    simA = sim;                              % artifact settings of this seed
+    if isfield(sim, 'coupling') && sim.coupling     % older runs have no such field
+        % Genuine interactions on top of the background, and one heart for
+        % the coupled EEG and the cardiac artifact. The background alone is
+        % kept, so run_it_validation can tell what the coupling made.
+        if ~isfile(fullfile(truthDir, sprintf('s%02d_bg.set', seed)))
+            pop_saveset(clean, 'filename', sprintf('s%02d_bg.set', seed), 'filepath', truthDir);
+        end
+        heart = sim_heart(sim, artifact_seed(seed, "ecg"));
+        [Xg, info{si}.coupling] = sim_coupled(lf, sim, seed, clean, heart);
+        clean.data = double(clean.data) + Xg;
+        simA.beats = heart.t;
+    end
+    if ~isfile(fullfile(truthDir, sprintf('s%02d.set', seed)))
+        pop_saveset(clean, 'filename', sprintf('s%02d.set', seed), 'filepath', truthDir);
+    end
 
     cond(end+1) = make_cond(seed, 'clean', "none", "none", Inf, 0, []); %#ok<AGROW>
     save_input(clean, clean.data, cond(end).file, simDir);
@@ -59,7 +90,7 @@ for si = 1:numel(sim.seeds)
         % seeded by name, so runs with different artifact lists are paired.
         arts = {};
         for p = find(parts ~= "badchan")
-            arts{end+1} = sim_artifact(lf, sim, char(parts(p)), artifact_seed(seed, parts(p))); %#ok<AGROW>
+            arts{end+1} = sim_artifact(lf, simA, char(parts(p)), artifact_seed(seed, parts(p))); %#ok<AGROW>
         end
         for k = 1:numel(sim.snrDb)
             [X, a, meta] = contaminate(clean, arts, any(parts == "badchan"), k, ...
@@ -70,12 +101,13 @@ for si = 1:numel(sim.seeds)
         end
     end
 end
-save(fullfile(outDir, 'simulation.mat'), 'sim', 'info');
+if ~resume, save(fullfile(outDir, 'simulation.mat'), 'sim', 'info'); end
 
 %% Pipeline
 pipe = sim.pipeline;
 pipe.inDir  = simDir;
 pipe.outDir = derivDir;
+if resume, pipe.overwrite = false; end      % skip datasets already cleaned
 T   = run_preprocessing(pipe);
 cfg = prep_config(pipe);
 
@@ -195,6 +227,7 @@ c = struct('file', sprintf('s%02d_%s', seed, name), 'seed', seed, 'name', name, 
 end
 
 function save_input(clean, X, name, simDir)
+if isfile(fullfile(simDir, [name '.set'])), return, end    % resume: keep the input
 E = clean;
 E.data    = X;
 E.setname = name;

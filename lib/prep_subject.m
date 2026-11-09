@@ -6,8 +6,8 @@ function qc = prep_subject(inFile, outDir, cfg, env)
 %                                                 at the front of the row
 %
 % import -> resample -> line noise -> filter (two branches) -> bad channels
-% -> reference -> ICA -> ICLabel + component rules -> [interpolate]
-% -> [epoch] -> save -> QC figures
+% -> reference -> ICA -> ICLabel + component rules -> [interpolate
+% -> average reference again] -> [epoch] -> save -> QC figures
 
 [~, base] = fileparts(inFile);
 if nargin < 4, env = []; end
@@ -162,6 +162,16 @@ if cfg.interpolate
     EEG = pop_interp(EEG, chanlocsFull, 'spherical');
 end
 qc.interpolated = cfg.interpolate;
+
+% The average was taken before interpolation, over the kept channels only;
+% the interpolated ones break the zero sum. 'refica','off' keeps the ICA
+% weights, which pop_reref would otherwise drop since icachansind no longer
+% covers every channel.
+qc.reref_final = "none";
+if cfg.rerefAfterInterp && isempty(cfg.reref) && cfg.interpolate && qc.nchan_rejected > 0
+    EEG = pop_reref(EEG, [], 'refica', 'off');
+    qc.reref_final = "average";
+end
 qc.rank_final   = prep_rank(EEG);
 qc.nchan_final  = EEG.nbchan;
 
